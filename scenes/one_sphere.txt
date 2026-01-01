@@ -1,0 +1,13 @@
+# Minimal Scene for Step 1
+
+# Set: Background color (R=0, G=0, B=0), Shadow rays=1, Recursion=1
+set 0 0 0 1 1
+
+# Camera: Pos(0,0,0), LookAt(0,0,-1), Up(0,1,0), Dist(1), Width(1)
+cam 0 0 0 0 0 -1 0 1 0 1 1
+
+# Material 1: (Just placeholders for now, Red color)
+mtl 1 0 0 1 1 1 1 1 1 10 0
+
+# Sphere: Center(0,0,-3), Radius(1), MaterialIndex(1)
+sph 0 0 -3 1 1
