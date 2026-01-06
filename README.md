@@ -10,6 +10,15 @@ with default height and width (which is 500 pixels for each):
 python ray_tracer.py scenes\Spheres.txt scenes\Spheres.png
 ```
 
+example:
+```bash
+python ray_tracer.py scenes\one_sphere.txt output\one_sphere.png
+```
+
+testing for pool file but not overriding pool image given in skeleton:
+```bash
+python ray_tracer.py scenes\pool.txt output\pool_replication_attempt.png
+```
 
 
 

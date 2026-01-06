@@ -95,8 +95,24 @@ def parse_scene_file(file_path):
 def save_image(image_array, output_path_and_file_name):
     image = Image.fromarray(np.uint8(image_array))
 
-    # Save the image to a file
+    # saving the image to the specified path:
     image.save(output_path_and_file_name)
+
+
+def print_program_args(args):
+    print(f'\n{"="*20} program arguments: {"="*20}\n {args}.\n')
+
+
+def print_parsed_scene_file_data(camera, scene_settings, objects):
+    print(f'{"="*20} parsed scene file data: {"="*20}')
+    print("Camera:", camera.__dict__)
+    print("\nScene Settings:", scene_settings.__dict__)
+    print("\nObjects in the scene:")
+    for obj in objects:
+        # print a short summary for each object
+        print("\t", type(obj).__name__, obj.__dict__)
+    print()
+
 
 def main():
     # handling program arguments:
@@ -108,18 +124,20 @@ def main():
     args = parser.parse_args()
     
     # testing args parsing values:
-    print("\nArgsuments:", args, "\n\n")
+    print_program_args(args)
 
 
     # Parse the scene file:
-    # FIX THIS ---> camera, scene_settings, objects = parse_scene_file(args.scene_file)
+    camera, scene_settings, objects = parse_scene_file(args.scene_file)
+    # printing parsed scene file data for debugging:
+    print_parsed_scene_file_data(camera, scene_settings, objects)
     
 
     # TODO: Implement the ray tracer
-    
 
     # creating 2d image array of the resulting image:
     image_array = np.zeros((args.height, args.width, 3))
+    image_array.fill(255)  # white background instead of black for visibility
 
     # Save the output into an image:
     save_image(image_array, args.output_image)
