@@ -114,6 +114,10 @@ def print_parsed_scene_file_data(camera, scene_settings, objects):
     print()
 
 
+def compute_output_image(camera, scene_settings, objects, image_array):
+    pass
+
+
 def main():
     # handling program arguments:
     parser = argparse.ArgumentParser(description='Python Ray Tracer')
@@ -126,18 +130,18 @@ def main():
     # testing args parsing values:
     print_program_args(args)
 
-
     # Parse the scene file:
     camera, scene_settings, objects = parse_scene_file(args.scene_file)
     # printing parsed scene file data for debugging:
     print_parsed_scene_file_data(camera, scene_settings, objects)
     
 
-    # TODO: Implement the ray tracer
-
+    # Implementing the ray tracer:
     # creating 2d image array of the resulting image:
     image_array = np.zeros((args.height, args.width, 3))
     image_array.fill(255)  # white background instead of black for visibility
+    # computing the image by ray tracing:
+    compute_output_image(camera, scene_settings, objects, image_array)
 
     # Save the output into an image:
     save_image(image_array, args.output_image)
