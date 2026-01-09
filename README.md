@@ -21,7 +21,8 @@ python ray_tracer.py scenes\pool.txt output\pool_replication_attempt.png
 ```
 ease of use commands for me:
 ```bash
-git clone REPO
+# connect with https if ssh key not in computer
+git clone REPO  
 
 git status
 
