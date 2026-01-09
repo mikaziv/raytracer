@@ -35,7 +35,10 @@ git push -u origin main
 git pull
 ```
 
-
+run testers in CMD:
+```bash
+New-Item -ItemType Directory -Force output; Get-ChildItem scenes -Filter *.txt | ForEach-Object { python ray_tracer.py $_.FullName "output/$($_.BaseName)_result.png" --height 50 --width 50 }
+```
 
 
 
