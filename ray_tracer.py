@@ -358,7 +358,7 @@ def compute_output_image(camera, scene_settings, objects, image_array):
                 color = phong_shade(P, N, ray_d, mat, lights, scene_settings, surfaces)
 
             image_array[j, i, :] = np.clip(color * 255.0, 0, 255)
-print("after render: min/max =", image_array.min(), image_array.max())
+
 
 
 
