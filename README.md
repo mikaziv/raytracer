@@ -19,7 +19,20 @@ testing for pool file but not overriding pool image given in skeleton:
 ```bash
 python ray_tracer.py scenes\pool.txt output\pool_replication_attempt.png
 ```
+ease of use commands for me:
+```bash
+git clone REPO
 
+git status
+
+git add file.txt file.png
+
+git commit -m "msg"
+
+git push -u origin main
+
+git pull
+```
 
 
 
