@@ -327,8 +327,8 @@ def compute_output_image(camera, scene_settings, objects, image_array):
     up_vec = np.array(camera.up_vector, float)
 
     forward = normalize(look_at - pos)
-    right   = normalize(np.cross(forward, up_vec))
-    up      = normalize(np.cross(right, forward))
+    right = -normalize(np.cross(forward, up_vec))
+    up = -normalize(np.cross(right, forward))
 
     pc = pos + forward * float(camera.screen_distance)
 
