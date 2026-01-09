@@ -11,7 +11,7 @@ from surfaces.cube import Cube
 from surfaces.infinite_plane import InfinitePlane
 from surfaces.sphere import Sphere
 
-EPS = 1e-5
+EPS = 1e-13
 
 def parse_scene_file(file_path):
     objects = []
@@ -113,7 +113,7 @@ def intersect_plane(ray_o, ray_d, pln):
     c = float(pln.offset)
 
     denom = np.dot(ray_d, N)
-    if abs(denom) < 1e-8:
+    if abs(denom) < EPS:
         return None
 
     t = (c - np.dot(ray_o, N)) / denom
@@ -137,7 +137,7 @@ def intersect_cube(ray_o, ray_d, box):
     tmax = float("inf")
 
     for axis in range(3):
-        if abs(ray_d[axis]) < 1e-8:
+        if abs(ray_d[axis]) < EPS:
             #if ray is parallel to the slabs
             if ray_o[axis] < bmin[axis] or ray_o[axis] > bmax[axis]:
                 return None
@@ -159,7 +159,7 @@ def intersect_cube(ray_o, ray_d, box):
     P = ray_o + t * ray_d
     # calculate normal at intersection point
     N = np.zeros(3, float)
-    tol = 1e-4
+    tol = EPS
     if abs(P[0] - bmin[0]) < tol: N = np.array([-1, 0, 0], float)
     elif abs(P[0] - bmax[0]) < tol: N = np.array([ 1, 0, 0], float)
     elif abs(P[1] - bmin[1]) < tol: N = np.array([0, -1, 0], float)
@@ -227,6 +227,7 @@ def build_perp_basis(w):
 ###########################
 ###### Shadow factor ######
 ###########################
+
 def shadow_factor(P, N, light, scene_settings, surfaces):
     light_pos = np.array(light.position, float)
     si = float(light.shadow_intensity)
@@ -235,7 +236,7 @@ def shadow_factor(P, N, light, scene_settings, surfaces):
     if int(scene_settings.root_number_shadow_rays) <= 1 or float(light.radius) <= 0.0:
         Lvec = light_pos - P
         dist = np.linalg.norm(Lvec)
-        if dist < 1e-8:
+        if dist < EPS:
             return 1.0
         L = Lvec / dist
         o = P + N * EPS
@@ -264,7 +265,7 @@ def shadow_factor(P, N, light, scene_settings, surfaces):
 
             dir_to_sample = sample - P
             dist = np.linalg.norm(dir_to_sample)
-            if dist < 1e-8:
+            if dist < EPS:
                 continue
             d = dir_to_sample / dist
 
@@ -275,6 +276,8 @@ def shadow_factor(P, N, light, scene_settings, surfaces):
     visible = hits / total
     # by shadow_intensity:
     return (1.0 - si) + si * visible
+
+
 
 def phong_shade(P, N, ray_dir, material, lights, scene_settings, surfaces):
     kd = np.array(material.diffuse_color, float)
@@ -290,7 +293,7 @@ def phong_shade(P, N, ray_dir, material, lights, scene_settings, surfaces):
 
         Lvec = light_pos - P
         dist = np.linalg.norm(Lvec)
-        if dist < 1e-8:
+        if dist < EPS:
             continue
         L = Lvec / dist
 
@@ -313,50 +316,67 @@ def phong_shade(P, N, ray_dir, material, lights, scene_settings, surfaces):
     return np.clip(out, 0.0, 1.0)
 
 
+def trace_ray(ray_o, ray_d, surfaces, materials, lights, scene_settings, depth):
+    if depth > int(scene_settings.max_recursions):
+        return np.array(scene_settings.background_color, float)
+    hit = closest_hit(ray_o, ray_d, surfaces)
+    if hit is None:
+        return np.array(scene_settings.background_color, float)
+    _, P, N, midx = hit
+    mat = materials[int(midx) - 1]
+    local_color = phong_shade(P, N, ray_d, mat, lights, scene_settings, surfaces)
+    refl = np.array(mat.reflection_color, float)
+    transparency = float(mat.transparency)
+
+    # Reflection
+    reflection_color = np.zeros(3, float)
+    if np.any(refl > EPS):
+        reflect_dir = normalize(reflect(-ray_d, N))
+        reflect_o = P + N * EPS
+        reflection_color = trace_ray(reflect_o, reflect_dir, surfaces, materials, lights, scene_settings, depth + 1) * refl
+
+    # Transparency
+    if transparency > EPS:
+        # Shoot the same ray just past the intersection point
+        transmit_o = P + ray_d * EPS
+        background_color = trace_ray(transmit_o, ray_d, surfaces, materials, lights, scene_settings, depth + 1)
+        # Blend according to the assignment formula
+        color = (
+            background_color * transparency +
+            local_color * (1 - transparency) +
+            reflection_color
+        )
+        return np.clip(color, 0.0, 1.0)
+    else:
+        # Opaque: blend local and reflection only
+        color = local_color * (1 - refl) + reflection_color
+        return np.clip(color, 0.0, 1.0)
+
 def compute_output_image(camera, scene_settings, objects, image_array):
     H, W, _ = image_array.shape
-
-    # splitting objects into materials, lights, surfaces
     materials = [o for o in objects if o.__class__.__name__ == "Material"]
     lights    = [o for o in objects if o.__class__.__name__ == "Light"]
     surfaces  = [o for o in objects if o.__class__.__name__ in ("Sphere", "InfinitePlane", "Cube")]
-
-    # camera basis and screen plane
     pos = np.array(camera.position, float)
     look_at = np.array(camera.look_at, float)
     up_vec = np.array(camera.up_vector, float)
-
     forward = normalize(look_at - pos)
     right = -normalize(np.cross(forward, up_vec))
     up = -normalize(np.cross(right, forward))
-
     pc = pos + forward * float(camera.screen_distance)
-
     screen_w = float(camera.screen_width)
     screen_h = screen_w * (H / W)
-
     px = screen_w / W
     py = screen_h / H
-
     bg = np.array(scene_settings.background_color, float)
-
     for j in range(H):
         for i in range(W):
             x = ((i + 0.5) - W / 2.0) * px
             y = (H / 2.0 - (j + 0.5)) * py
             Pscreen = pc + right * x + up * y
-
             ray_o = pos
             ray_d = normalize(Pscreen - pos)
-
-            hit = closest_hit(ray_o, ray_d, surfaces)
-            if hit is None:
-                color = bg
-            else:
-                _, P, N, midx = hit
-                mat = materials[int(midx) - 1]  
-                color = phong_shade(P, N, ray_d, mat, lights, scene_settings, surfaces)
-
+            color = trace_ray(ray_o, ray_d, surfaces, materials, lights, scene_settings, 0)
             image_array[j, i, :] = np.clip(color * 255.0, 0, 255)
 
 
