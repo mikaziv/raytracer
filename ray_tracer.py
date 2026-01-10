@@ -340,7 +340,7 @@ def trace_ray(ray_o, ray_d, surfaces, materials, lights, scene_settings, depth):
         # Shoot the same ray just past the intersection point
         transmit_o = P + ray_d * EPS
         background_color = trace_ray(transmit_o, ray_d, surfaces, materials, lights, scene_settings, depth + 1)
-        # Blend according to the assignment formula
+        # Additive color formula
         color = (
             background_color * transparency +
             local_color * (1 - transparency) +
@@ -348,10 +348,9 @@ def trace_ray(ray_o, ray_d, surfaces, materials, lights, scene_settings, depth):
         )
         return np.clip(color, 0.0, 1.0)
     else:
-        # Opaque: blend local and reflection only
-        color = local_color * (1 - refl) + reflection_color
+        # Opaque: additive color
+        color = local_color + reflection_color
         return np.clip(color, 0.0, 1.0)
-
 def compute_output_image(camera, scene_settings, objects, image_array):
     H, W, _ = image_array.shape
     materials = [o for o in objects if o.__class__.__name__ == "Material"]
