@@ -11,7 +11,9 @@ from surfaces.cube import Cube
 from surfaces.infinite_plane import InfinitePlane
 from surfaces.sphere import Sphere
 
-EPS = 1e-13
+EPS = 1e-5
+DENOM_EPS = 1e-8
+
 
 def parse_scene_file(file_path):
     objects = []
@@ -48,14 +50,12 @@ def parse_scene_file(file_path):
                 raise ValueError("Unknown object type: {}".format(obj_type))
     return camera, scene_settings, objects
 
-
 def save_image(image_array, output_path_and_file_name):
     image = Image.fromarray(np.clip(image_array, 0, 255).astype(np.uint8))
     image.save(output_path_and_file_name)
 
 def print_program_args(args):
     print(f'\n{"="*20} program arguments: {"="*20}\n {args}.\n')
-
 
 def print_parsed_scene_file_data(camera, scene_settings, objects):
     print(f'{"="*20} parsed scene file data: {"="*20}')
@@ -113,7 +113,7 @@ def intersect_plane(ray_o, ray_d, pln):
     c = float(pln.offset)
 
     denom = np.dot(ray_d, N)
-    if abs(denom) < EPS:
+    if abs(denom) < DENOM_EPS:
         return None
 
     t = (c - np.dot(ray_o, N)) / denom
@@ -137,7 +137,7 @@ def intersect_cube(ray_o, ray_d, box):
     tmax = float("inf")
 
     for axis in range(3):
-        if abs(ray_d[axis]) < EPS:
+        if abs(ray_d[axis]) < DENOM_EPS:
             #if ray is parallel to the slabs
             if ray_o[axis] < bmin[axis] or ray_o[axis] > bmax[axis]:
                 return None
@@ -159,7 +159,7 @@ def intersect_cube(ray_o, ray_d, box):
     P = ray_o + t * ray_d
     # calculate normal at intersection point
     N = np.zeros(3, float)
-    tol = EPS
+    tol = 1e-4
     if abs(P[0] - bmin[0]) < tol: N = np.array([-1, 0, 0], float)
     elif abs(P[0] - bmax[0]) < tol: N = np.array([ 1, 0, 0], float)
     elif abs(P[1] - bmin[1]) < tol: N = np.array([0, -1, 0], float)
@@ -277,8 +277,6 @@ def shadow_factor(P, N, light, scene_settings, surfaces):
     # by shadow_intensity:
     return (1.0 - si) + si * visible
 
-
-
 def phong_shade(P, N, ray_dir, material, lights, scene_settings, surfaces):
     kd = np.array(material.diffuse_color, float)
     ks = np.array(material.specular_color, float)
@@ -315,7 +313,6 @@ def phong_shade(P, N, ray_dir, material, lights, scene_settings, surfaces):
 
     return np.clip(out, 0.0, 1.0)
 
-
 def trace_ray(ray_o, ray_d, surfaces, materials, lights, scene_settings, depth):
     if depth > int(scene_settings.max_recursions):
         return np.array(scene_settings.background_color, float)
@@ -349,7 +346,7 @@ def trace_ray(ray_o, ray_d, surfaces, materials, lights, scene_settings, depth):
         return np.clip(color, 0.0, 1.0)
     else:
         # Opaque: blend local and reflection only
-        color = local_color * (1 - refl) + reflection_color
+        color = local_color + reflection_color
         return np.clip(color, 0.0, 1.0)
 
 def compute_output_image(camera, scene_settings, objects, image_array):
@@ -361,8 +358,11 @@ def compute_output_image(camera, scene_settings, objects, image_array):
     look_at = np.array(camera.look_at, float)
     up_vec = np.array(camera.up_vector, float)
     forward = normalize(look_at - pos)
-    right = -normalize(np.cross(forward, up_vec))
-    up = -normalize(np.cross(right, forward))
+    right   = normalize(np.cross(forward, up_vec)) 
+    up      = normalize(np.cross(right, forward))  
+    #forward = normalize(look_at - pos)
+    # right = -normalize(np.cross(forward, up_vec))
+    # up = -normalize(np.cross(right, forward))
     pc = pos + forward * float(camera.screen_distance)
     screen_w = float(camera.screen_width)
     screen_h = screen_w * (H / W)
