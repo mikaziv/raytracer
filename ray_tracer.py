@@ -6,7 +6,6 @@ from camera import Camera
 from light import Light
 from material import Material
 from scene_settings import SceneSettings
-import scene_settings
 from surfaces.cube import Cube
 from surfaces.infinite_plane import InfinitePlane
 from surfaces.sphere import Sphere
@@ -54,38 +53,19 @@ def save_image(image_array, output_path_and_file_name):
     image = Image.fromarray(np.clip(image_array, 0, 255).astype(np.uint8))
     image.save(output_path_and_file_name)
 
-def print_program_args(args):
-    print(f'\n{"="*20} program arguments: {"="*20}\n {args}.\n')
-
-def print_parsed_scene_file_data(camera, scene_settings, objects):
-    print(f'{"="*20} parsed scene file data: {"="*20}')
-    print("Camera:", camera.__dict__)
-    print("\nScene Settings:", scene_settings.__dict__)
-    print("\nObjects in the scene:")
-    for obj in objects:
-        # print a short summary for each object
-        print("\t", type(obj).__name__, obj.__dict__)
-    print()
-
-###########################
-## Ray tracing functions ##
-###########################
-
 def normalize(v):
     v = np.array(v, dtype=float)
     n = np.linalg.norm(v)
     return v / n if n != 0 else v
 
 def reflect(L, N):
-    # L,N normalized
     return 2.0 * np.dot(N, L) * N - L
 
 def intersect_sphere(ray_o, ray_d, sph):
     C = np.array(sph.position, float)
     r = float(sph.radius)
-
     oc = ray_o - C
-    a = np.dot(ray_d, ray_d)  # =1 if ray_d normalized
+    a = np.dot(ray_d, ray_d) 
     b = 2.0 * np.dot(oc, ray_d)
     c = np.dot(oc, oc) - r*r
     disc = b*b - 4*a*c
@@ -121,7 +101,6 @@ def intersect_plane(ray_o, ray_d, pln):
         return None
 
     P = ray_o + t * ray_d
-    # normal pointing against the ray
     if np.dot(N, -ray_d) < 0:
         N = -N
     return t, P, N, pln.material_index
@@ -138,7 +117,6 @@ def intersect_cube(ray_o, ray_d, box):
 
     for axis in range(3):
         if abs(ray_d[axis]) < DENOM_EPS:
-            #if ray is parallel to the slabs
             if ray_o[axis] < bmin[axis] or ray_o[axis] > bmax[axis]:
                 return None
         else:
@@ -157,7 +135,6 @@ def intersect_cube(ray_o, ray_d, box):
         return None
 
     P = ray_o + t * ray_d
-    # calculate normal at intersection point
     N = np.zeros(3, float)
     tol = 1e-4
     if abs(P[0] - bmin[0]) < tol: N = np.array([-1, 0, 0], float)
@@ -194,10 +171,9 @@ def closest_hit(ray_o, ray_d, surfaces):
             best_t = t
             best = (t, P, N, midx)
 
-    return best  # or None
+    return best  
 
 def is_occluded(ray_o, ray_d, max_dist, surfaces):
-    # does any object block the ray
     for obj in surfaces:
         if obj.__class__.__name__ == "Sphere":
             hit = intersect_sphere(ray_o, ray_d, obj)
@@ -224,15 +200,10 @@ def build_perp_basis(w):
     v = normalize(np.cross(w, u))
     return u, v
 
-###########################
-###### Shadow factor ######
-###########################
-
 def shadow_factor(P, N, light, scene_settings, surfaces):
     light_pos = np.array(light.position, float)
     si = float(light.shadow_intensity)
 
-    # hard shadow
     if int(scene_settings.root_number_shadow_rays) <= 1 or float(light.radius) <= 0.0:
         Lvec = light_pos - P
         dist = np.linalg.norm(Lvec)
@@ -243,16 +214,13 @@ def shadow_factor(P, N, light, scene_settings, surfaces):
         blocked = is_occluded(o, L, dist - EPS, surfaces)
         return 1.0 if not blocked else (1.0 - si)
 
-    # soft shadow:
     Ngrid = int(scene_settings.root_number_shadow_rays)
     total = Ngrid * Ngrid
     hits = 0
 
-    # plane perpendicular to light-to-point direction
     w = normalize(P - light_pos)
     u, v = build_perp_basis(w)
 
-    # radius/width
     side = float(light.radius)
     cell = side / Ngrid
     half = side / 2.0
@@ -274,14 +242,12 @@ def shadow_factor(P, N, light, scene_settings, surfaces):
                 hits += 1
 
     visible = hits / total
-    # by shadow_intensity:
     return (1.0 - si) + si * visible
 
 def phong_shade(P, N, ray_dir, material, lights, scene_settings, surfaces):
     kd = np.array(material.diffuse_color, float)
     ks = np.array(material.specular_color, float)
     shin = float(material.shininess)
-
     V = normalize(-ray_dir)
     out = np.zeros(3, float)
 
@@ -300,17 +266,11 @@ def phong_shade(P, N, ray_dir, material, lights, scene_settings, surfaces):
             continue
 
         sf = shadow_factor(P, N, light, scene_settings, surfaces)
-
-        # diffuse
         diff = kd * I * max(0.0, nl)
-
-        # specular (Phong)
         R = reflect(L, N)
         rv = max(0.0, float(np.dot(R, V)))
         spec = ks * (I * float(light.specular_intensity)) * (rv ** shin)
-
         out += sf * (diff + spec)
-
     return np.clip(out, 0.0, 1.0)
 
 def trace_ray(ray_o, ray_d, surfaces, materials, lights, scene_settings, depth):
@@ -325,19 +285,15 @@ def trace_ray(ray_o, ray_d, surfaces, materials, lights, scene_settings, depth):
     refl = np.array(mat.reflection_color, float)
     transparency = float(mat.transparency)
 
-    # Reflection
     reflection_color = np.zeros(3, float)
     if np.any(refl > EPS):
         reflect_dir = normalize(reflect(-ray_d, N))
         reflect_o = P + N * EPS
         reflection_color = trace_ray(reflect_o, reflect_dir, surfaces, materials, lights, scene_settings, depth + 1) * refl
 
-    # Transparency
     if transparency > EPS:
-        # Shoot the same ray just past the intersection point
         transmit_o = P + ray_d * EPS
         background_color = trace_ray(transmit_o, ray_d, surfaces, materials, lights, scene_settings, depth + 1)
-        # Blend according to the assignment formula
         color = (
             background_color * transparency +
             local_color * (1 - transparency) +
@@ -345,7 +301,6 @@ def trace_ray(ray_o, ray_d, surfaces, materials, lights, scene_settings, depth):
         )
         return np.clip(color, 0.0, 1.0)
     else:
-        # Opaque: blend local and reflection only
         color = local_color + reflection_color
         return np.clip(color, 0.0, 1.0)
 
@@ -360,9 +315,6 @@ def compute_output_image(camera, scene_settings, objects, image_array):
     forward = normalize(look_at - pos)
     right   = normalize(np.cross(forward, up_vec)) 
     up      = normalize(np.cross(right, forward))  
-    #forward = normalize(look_at - pos)
-    # right = -normalize(np.cross(forward, up_vec))
-    # up = -normalize(np.cross(right, forward))
     pc = pos + forward * float(camera.screen_distance)
     screen_w = float(camera.screen_width)
     screen_h = screen_w * (H / W)
@@ -379,38 +331,19 @@ def compute_output_image(camera, scene_settings, objects, image_array):
             color = trace_ray(ray_o, ray_d, surfaces, materials, lights, scene_settings, 0)
             image_array[j, i, :] = np.clip(color * 255.0, 0, 255)
 
-
-
-
 def main():
-    # handling program arguments:
     parser = argparse.ArgumentParser(description='Python Ray Tracer')
     parser.add_argument('scene_file', type=str, help='Path to the scene file')
     parser.add_argument('output_image', type=str, help='Name of the output image file')
     parser.add_argument('--width', type=int, default=500, help='Image width')
     parser.add_argument('--height', type=int, default=500, help='Image height')
     args = parser.parse_args()
-    
-    # testing args parsing values:
-    print_program_args(args)
-
-    # Parse the scene file:
     camera, scene_settings, objects = parse_scene_file(args.scene_file)
-    # printing parsed scene file data for debugging:
-    print_parsed_scene_file_data(camera, scene_settings, objects)
-    
-
-    # Implementing the ray tracer:
-    # creating 2d image array of the resulting image:
     image_array = np.zeros((args.height, args.width, 3), dtype=float)
     bg = np.array(scene_settings.background_color, float) * 255.0
     image_array[:] = bg
-    # computing the image by ray tracing:
     compute_output_image(camera, scene_settings, objects, image_array)
-
-    # Save the output into an image:
     save_image(image_array, args.output_image)
-
 
 if __name__ == '__main__':
     main()
