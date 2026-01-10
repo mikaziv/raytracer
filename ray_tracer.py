@@ -53,6 +53,19 @@ def save_image(image_array, output_path_and_file_name):
     image = Image.fromarray(np.clip(image_array, 0, 255).astype(np.uint8))
     image.save(output_path_and_file_name)
 
+def print_program_args(args):
+    print(f'\n{"="*20} program arguments: {"="*20}\n {args}.\n')
+
+def print_parsed_scene_file_data(camera, scene_settings, objects):
+    print(f'{"="*20} parsed scene file data: {"="*20}')
+    print("Camera:", camera.__dict__)
+    print("\nScene Settings:", scene_settings.__dict__)
+    print("\nObjects in the scene:")
+    for obj in objects:
+        # print a short summary for each object
+        print("\t", type(obj).__name__, obj.__dict__)
+    print()
+
 def normalize(v):
     v = np.array(v, dtype=float)
     n = np.linalg.norm(v)
@@ -338,7 +351,9 @@ def main():
     parser.add_argument('--width', type=int, default=500, help='Image width')
     parser.add_argument('--height', type=int, default=500, help='Image height')
     args = parser.parse_args()
+    print_program_args(args)
     camera, scene_settings, objects = parse_scene_file(args.scene_file)
+    print_parsed_scene_file_data(camera, scene_settings, objects)
     image_array = np.zeros((args.height, args.width, 3), dtype=float)
     bg = np.array(scene_settings.background_color, float) * 255.0
     image_array[:] = bg
