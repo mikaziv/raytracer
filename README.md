@@ -40,6 +40,11 @@ run testers in CMD:
 New-Item -ItemType Directory -Force output; Get-ChildItem scenes -Filter *.txt | ForEach-Object { python ray_tracer.py $_.FullName "output/$($_.BaseName)_result.png" --height 50 --width 50 }
 ```
 
+render all testers in parallel in powershell:
+```bash
+New-Item -ItemType Directory -Force output; Get-ChildItem scenes -Filter *.txt | ForEach-Object { python ray_tracer.py $_.FullName "output/$($_.BaseName)_result.png" --height 500 --width 500 }
+```
+
 
 
 

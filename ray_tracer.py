@@ -11,7 +11,8 @@ from surfaces.cube import Cube
 from surfaces.infinite_plane import InfinitePlane
 from surfaces.sphere import Sphere
 
-EPS = 1e-13
+EPS = 1e-5
+ALLOWED_PRINTS = True
 
 def parse_scene_file(file_path):
     objects = []
@@ -53,6 +54,7 @@ def save_image(image_array, output_path_and_file_name):
     image = Image.fromarray(np.clip(image_array, 0, 255).astype(np.uint8))
     image.save(output_path_and_file_name)
 
+
 def print_program_args(args):
     print(f'\n{"="*20} program arguments: {"="*20}\n {args}.\n')
 
@@ -67,18 +69,20 @@ def print_parsed_scene_file_data(camera, scene_settings, objects):
         print("\t", type(obj).__name__, obj.__dict__)
     print()
 
+
 ###########################
 ## Ray tracing functions ##
 ###########################
-
 def normalize(v):
     v = np.array(v, dtype=float)
     n = np.linalg.norm(v)
     return v / n if n != 0 else v
 
+
 def reflect(L, N):
     # L,N normalized
     return 2.0 * np.dot(N, L) * N - L
+
 
 def intersect_sphere(ray_o, ray_d, sph):
     C = np.array(sph.position, float)
@@ -108,6 +112,7 @@ def intersect_sphere(ray_o, ray_d, sph):
     N = normalize(P - C)
     return t, P, N, sph.material_index
 
+
 def intersect_plane(ray_o, ray_d, pln):
     N = normalize(np.array(pln.normal, float))
     c = float(pln.offset)
@@ -125,6 +130,7 @@ def intersect_plane(ray_o, ray_d, pln):
     if np.dot(N, -ray_d) < 0:
         N = -N
     return t, P, N, pln.material_index
+
 
 def intersect_cube(ray_o, ray_d, box):
     C = np.array(box.position, float)
@@ -172,10 +178,10 @@ def intersect_cube(ray_o, ray_d, box):
 
     return t, P, N, box.material_index
 
+
 def closest_hit(ray_o, ray_d, surfaces):
     best = None
     best_t = float("inf")
-
     for obj in surfaces:
         if obj.__class__.__name__ == "Sphere":
             hit = intersect_sphere(ray_o, ray_d, obj)
@@ -185,35 +191,15 @@ def closest_hit(ray_o, ray_d, surfaces):
             hit = intersect_cube(ray_o, ray_d, obj)
         else:
             continue
-
         if hit is None:
             continue
-
         t, P, N, midx = hit
-        if t < best_t:
+        # Add a small tolerance to avoid picking the wrong surface at shared boundaries
+        if t < best_t - EPS:
             best_t = t
             best = (t, P, N, midx)
+    return best
 
-    return best  # or None
-
-def is_occluded(ray_o, ray_d, max_dist, surfaces):
-    # does any object block the ray
-    for obj in surfaces:
-        if obj.__class__.__name__ == "Sphere":
-            hit = intersect_sphere(ray_o, ray_d, obj)
-        elif obj.__class__.__name__ == "InfinitePlane":
-            hit = intersect_plane(ray_o, ray_d, obj)
-        elif obj.__class__.__name__ == "Cube":
-            hit = intersect_cube(ray_o, ray_d, obj)
-        else:
-            continue
-
-        if hit is None:
-            continue
-        t = hit[0]
-        if EPS < t < max_dist:
-            return True
-    return False
 
 def build_perp_basis(w):
     w = normalize(w)
@@ -224,15 +210,32 @@ def build_perp_basis(w):
     v = normalize(np.cross(w, u))
     return u, v
 
-###########################
-###### Shadow factor ######
-###########################
+
+def is_occluded(ray_o, ray_d, max_dist, surfaces, ref_point=None):
+    for obj in surfaces:
+        if obj.__class__.__name__ == "Sphere":
+            hit = intersect_sphere(ray_o, ray_d, obj)
+        elif obj.__class__.__name__ == "InfinitePlane":
+            hit = intersect_plane(ray_o, ray_d, obj)
+        elif obj.__class__.__name__ == "Cube":
+            hit = intersect_cube(ray_o, ray_d, obj)
+        else:
+            continue
+
+        if hit is None:
+            continue
+        t, P, N, midx = hit
+        if EPS < t < max_dist:
+            if ref_point is not None and np.allclose(P, ref_point, atol=1e-4):
+                continue
+            return True
+    return False
+
 
 def shadow_factor(P, N, light, scene_settings, surfaces):
     light_pos = np.array(light.position, float)
     si = float(light.shadow_intensity)
 
-    # hard shadow
     if int(scene_settings.root_number_shadow_rays) <= 1 or float(light.radius) <= 0.0:
         Lvec = light_pos - P
         dist = np.linalg.norm(Lvec)
@@ -243,16 +246,13 @@ def shadow_factor(P, N, light, scene_settings, surfaces):
         blocked = is_occluded(o, L, dist - EPS, surfaces)
         return 1.0 if not blocked else (1.0 - si)
 
-    # soft shadow:
     Ngrid = int(scene_settings.root_number_shadow_rays)
     total = Ngrid * Ngrid
     hits = 0
 
-    # plane perpendicular to light-to-point direction
     w = normalize(P - light_pos)
     u, v = build_perp_basis(w)
 
-    # radius/width
     side = float(light.radius)
     cell = side / Ngrid
     half = side / 2.0
@@ -263,20 +263,19 @@ def shadow_factor(P, N, light, scene_settings, surfaces):
             ry = (j + np.random.rand()) * cell - half
             sample = light_pos + u * rx + v * ry
 
-            dir_to_sample = sample - P
-            dist = np.linalg.norm(dir_to_sample)
+            # CORRECT: ray from sample (on light) to P (surface point)
+            dir_to_P = P - sample
+            dist = np.linalg.norm(dir_to_P)
             if dist < EPS:
                 continue
-            d = dir_to_sample / dist
+            d = dir_to_P / dist
 
-            o = P + N * EPS
-            if not is_occluded(o, d, dist - EPS, surfaces):
+            o = sample + d * EPS  # offset origin to avoid self-intersection at light
+            if not is_occluded(o, d, dist - EPS, surfaces, ref_point=P):
                 hits += 1
 
     visible = hits / total
-    # by shadow_intensity:
     return (1.0 - si) + si * visible
-
 
 
 def phong_shade(P, N, ray_dir, material, lights, scene_settings, surfaces):
@@ -351,6 +350,8 @@ def trace_ray(ray_o, ray_d, surfaces, materials, lights, scene_settings, depth):
         # Opaque: additive color
         color = local_color + reflection_color
         return np.clip(color, 0.0, 1.0)
+
+
 def compute_output_image(camera, scene_settings, objects, image_array):
     H, W, _ = image_array.shape
     materials = [o for o in objects if o.__class__.__name__ == "Material"]
@@ -379,8 +380,6 @@ def compute_output_image(camera, scene_settings, objects, image_array):
             image_array[j, i, :] = np.clip(color * 255.0, 0, 255)
 
 
-
-
 def main():
     # handling program arguments:
     parser = argparse.ArgumentParser(description='Python Ray Tracer')
@@ -391,15 +390,16 @@ def main():
     args = parser.parse_args()
     
     # testing args parsing values:
-    print_program_args(args)
+    if ALLOWED_PRINTS:
+        print_program_args(args)
 
     # Parse the scene file:
     camera, scene_settings, objects = parse_scene_file(args.scene_file)
     # printing parsed scene file data for debugging:
-    print_parsed_scene_file_data(camera, scene_settings, objects)
+    if ALLOWED_PRINTS:
+        print_parsed_scene_file_data(camera, scene_settings, objects)
     
-
-    # Implementing the ray tracer:
+    # implementing the ray tracer:
     # creating 2d image array of the resulting image:
     image_array = np.zeros((args.height, args.width, 3), dtype=float)
     bg = np.array(scene_settings.background_color, float) * 255.0
